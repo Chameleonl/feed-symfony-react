@@ -1,5 +1,5 @@
 import { useState, useEffect, type FormEvent } from "react";
-import type { Post } from "../types/index";
+import type { Post } from "../types/types";
 import getGuestToken from "../utils/guestToken";
 import { deletePost, getPosts } from "@/utils/api";
 
