@@ -1,7 +1,10 @@
 import { useState, useEffect, type FormEvent } from "react";
-import type { Post } from "../types/types";
-import getGuestToken from "../utils/guestToken";
-import { deletePost, getPosts } from "@/utils/api";
+
+import type { Post } from "@/types/types";
+import getGuestToken from "@/utils/guestToken";
+import { deletePost, getPosts, likePost, unlikePost } from "@/utils/api";
+import PostForm from "@/components/PostForm";
+import PostItem from "@/components/PostItem";
 
 const API_URL = "http://localhost:8000/api/posts";
 
@@ -15,60 +18,81 @@ export default function Feed() {
 		e.preventDefault();
 		if (!newPost.trim()) return;
 
+		if (newPost.length > 255) {
+			alert("Your post is too long! Please make sure it is 255 characters or less.");
+			return;
+		}
+
 		await fetch(API_URL, {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ content: newPost, guestToken: guestToken }),
+			headers: { "Content-Type": "application/json", "X-Guest-Token": guestToken },
+			body: JSON.stringify({ content: newPost }),
 		});
 
 		setNewPost("");
 
-		const updatedPosts = await getPosts();
+		const updatedPosts = await getPosts(guestToken);
 		setPosts(updatedPosts);
 	};
 
 	const handleDelete = async (id: number) => {
-		const success = await deletePost(id, guestToken, userId);
+		const success = await deletePost(id, guestToken);
 		if (success) {
-			const updatedPosts = await getPosts();
+			const updatedPosts = await getPosts(guestToken);
 			setPosts(updatedPosts);
+			return;
+		}
+
+		return;
+	};
+
+	const handleLikeToggle = async (post: Post) => {
+		// optimistic
+		setPosts((prev) =>
+			prev.map((p) =>
+				p.id === post.id
+					? {
+							...p,
+							likedByMe: !p.likedByMe,
+							likesCount: !p.likedByMe
+								? (Number(p.likesCount) + 1).toString()
+								: (Number(p.likesCount) - 1).toString(),
+					  }
+					: p
+			)
+		);
+
+		const success = post.likedByMe
+			? await unlikePost(post.id, guestToken, userId)
+			: await likePost(post.id, guestToken, userId);
+
+		if (success) {
+			// fetch the latest from backend to reconcile
+			const updatedPosts = await getPosts(guestToken);
+			setPosts(updatedPosts);
+		} else {
+			// revert optimistic update if failed
+			setPosts((prev) =>
+				prev.map((p) =>
+					p.id === post.id ? { ...p, likedByMe: post.likedByMe, likesCount: post.likesCount } : p
+				)
+			);
 		}
 	};
 
 	useEffect(() => {
-		getPosts().then(setPosts).catch(console.error);
-	}, []);
+		getPosts(guestToken).then(setPosts).catch(console.error);
+	}, [guestToken]);
 
 	return (
 		<div className="p-4 max-w-lg mx-auto">
-			<form onSubmit={handleSubmit} className="flex mb-4">
-				<input
-					type="text"
-					value={newPost}
-					onChange={(e) => setNewPost(e.target.value)}
-					maxLength={255}
-					placeholder="Write a post..."
-					className="flex-1 border p-2 rounded-l"
-				/>
-				<button type="submit" className="bg-blue-500 text-white px-4 rounded-r">
-					Post
-				</button>
-			</form>
-
-			<ul>
-				{posts.map((post) => (
-					<li key={post.id} className="border-b py-2 flex justify-between items-center">
-						<div>
-							<b>{post.authorName}</b> {post.content}
-						</div>
-						{post.authorToken === guestToken && (
-							<button onClick={() => handleDelete(post.id)} className="text-red-500 hover:underline">
-								Delete
-							</button>
-						)}
-					</li>
-				))}
-			</ul>
+			<PostForm handleSubmit={handleSubmit} newPost={newPost} setNewPost={setNewPost} />
+			<PostItem
+				posts={posts}
+				guestToken={guestToken}
+				handleDelete={handleDelete}
+				onLikeToggle={handleLikeToggle}
+			/>
 		</div>
 	);
 }

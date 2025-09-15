@@ -6,4 +6,5 @@ export interface Post {
 	authorName: string;
 	authorId: string | null;
 	authorToken: string | null;
+	likedByMe: boolean;
 }

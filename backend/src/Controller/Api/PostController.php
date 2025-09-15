@@ -21,8 +21,11 @@ class PostController extends AbstractController
     }
 
     #[Route("/api/posts", name: "list", methods: ["GET"])]
-    public function list(): JsonResponse
+    public function list(Request $request): JsonResponse
     {
+        $guestToken = $request->headers->get("X-Guest-Token") ?? null;
+        $userId = null;
+
         $posts = $this->em->getRepository(Post::class)->findBy([], ["createdAt" => "DESC"]);
 
         if (!$posts) {
@@ -31,12 +34,23 @@ class PostController extends AbstractController
 
         $result = [];
         foreach ($posts as $post) {
+            $likesCount = count($post->getLikes());
+            $likedByMe = false;
+            error_log("GuestToken from request: " . $guestToken);
+
+            if ($userId != null) {
+                $likedByMe = (bool) $this->em->getRepository(Like::class)->findOneBy(["post" => $post, "user" => $userId]);
+            } elseif ($guestToken) {
+                $likedByMe = (bool) $this->em->getRepository(Like::class)->findOneBy(["post" => $post, "guestToken" => $guestToken]);
+            }
+
             $result[] = [
                 "id" => $post->getId(),
                 "content" => $post->getContent(),
                 "created_at" => $post->getCreatedAt()->format("c"),
-                "likesCount" => count($post->getLikes()),
-                "authorToken" => $post->getAuthorToken()
+                "authorToken" => $post->getAuthorToken(),
+                "likesCount" => $likesCount,
+                "likedByMe" => $likedByMe,
             ];
         }
 
@@ -48,8 +62,8 @@ class PostController extends AbstractController
     {
         $data = json_decode($request->getContent(), true);
         $content = $data["content"] ?? null;
-        $guestToken = $data["guestToken"] ?? null;
-        $userId = $data['userId'] ?? null;
+        $guestToken = $request->headers->get("X-Guest-Token") ?? null;
+        $userId = $data["userId"] ?? null;
 
         if (!$content) {
             return $this->json(["error" => "Please include some text in your post."], 400);
@@ -66,7 +80,7 @@ class PostController extends AbstractController
         } else if ($guestToken) {
             $post->setAuthorToken($guestToken);
         } else {
-            return $this->json(["error"=> "Missing authentication."], 400);
+            return $this->json(["error" => "Missing authentication."], 400);
         }
 
         $this->em->persist($post);
@@ -75,26 +89,100 @@ class PostController extends AbstractController
         return $this->json([
             "id" => $post->getId(),
             "content" => $post->getContent(),
-            "createdAt" => $post->getCreatedAt()->format("c"),], 201);
+            "createdAt" => $post->getCreatedAt()->format("c"),
+        ], 201);
     }
 
     #[Route("/api/posts/{id}", name: "delete", methods: ["DELETE"])]
     public function delete(int $id, Request $request): JsonResponse
     {
         $post = $this->em->getRepository(Post::class)->find($id);
-        if (!$post) return $this->json(["error" => "Post not found"], 404);
+        if (!$post)
+            return $this->json(["error" => "Post not found"], 404);
 
         $data = json_decode($request->getContent(), true);
-        $guestToken = $data["guestToken"] ?? null;
+        $guestToken = $request->headers->get("X-Guest-Token") ?? null;
         $userId = $data["userId"] ?? null;
 
-        $isAuthor = ($post->getAuthor()?->getId() === (int)$userId) || ($post->getAuthorToken() === $guestToken);
+        $isAuthor = ($post->getAuthor()?->getId() === (int) $userId) || ($post->getAuthorToken() === $guestToken);
 
-        if (!$isAuthor) return $this->json(["error" => "Forbidden"], 403);
+        if (!$isAuthor)
+            return $this->json(["error" => "Forbidden"], 403);
 
         $this->em->remove($post);
         $this->em->flush();
 
         return $this->json(["success" => true], 200);
+    }
+
+    #[Route("/api/posts/{id}/like", name: "like", methods: ["POST"])]
+    public function like(int $id, Request $request): JsonResponse
+    {
+        $post = $this->em->getRepository(Post::class)->find($id);
+        if (!$post)
+            return $this->json(["error" => "Post not found", 404]);
+
+        $data = json_decode($request->getContent(), true);
+        $guestToken = $request->headers->get("X-Guest-Token") ?? null;
+        $userId = $data["userId"] ?? null;
+
+        if ($userId) {
+            $user = $this->em->getRepository(User::class)->find($userId);
+            if (!$user) return $this->json(["error" => "User not found"], 404);
+
+            $existingLike = $this->em->getRepository(Like::class)->findOneBy(["post" => $post, "user" => $user]);
+            if ($existingLike) return $this->json(["error" => "Already liked"], 400);
+
+            $like = (new Like())->setPost($post)->setuserId($userId)->setCreatedAt(new \DateTimeImmutable());
+        } elseif ($guestToken) {
+            $existingLike = $this->em->getRepository(Like::class)->findOneBy(["post" => $post, "guestToken" => $guestToken]);
+            if ($existingLike) return $this->json(["error" => "Already liked"], 400);
+            $like = (new Like())->setPost($post)->setGuestToken($guestToken)->setCreatedAt(new \DateTimeImmutable());
+        } else {
+            return $this->json(["error" => "Missing authentication"], 400);
+        }
+
+
+        $this->em->persist($like);
+        $this->em->flush();
+
+        return $this->json(["id" => $id, "message" => "Like successful"], 200);
+    }
+
+    #[Route("api/posts/{id}/like", name: "unlike", methods: ["DELETE"])]
+    public function unlike(int $id, Request $request): JsonResponse
+    {
+        $post = $this->em->getRepository(Post::class)->find($id);
+        if (!$post) {
+            return $this->json(["error" => "Post not found"], 404);
+        }
+
+        $data = json_decode($request->getContent(), true);
+        $guestToken = $request->headers->get("X-Guest-Token") ?? null;
+        $userId = $data["userId"] ?? null;
+
+        if ($userId) {
+            $user = $this->em->getRepository(User::class)->find($userId);
+            if (!$user) return $this->json(["error" => "User not found"], 404);
+
+            $existingLike = $this->em->getRepository(Like::class)->findOneBy(["post" => $post, "user" => $user]);
+            if (!$existingLike) {
+                return $this->json(["error" => "Not liked yet"], 400);
+            }
+
+            $this->em->remove($existingLike);
+            $this->em->flush();
+            } elseif ($guestToken) {
+                $existingLike = $this->em->getRepository(Like::class)->findOneBy(["post" => $post, "guestToken" => $guestToken]);
+                if (!$existingLike) {
+                    return $this->json(["error" => "Not liked yet"], 400);
+                }
+
+                $this->em->remove($existingLike);
+                $this->em->flush();
+            } else {
+                return $this->json(["error" => "Missing authentication."], 400);
+            }
+            return $this->json(["id" => $id, "message" => "Unliked successfully"], 200);
     }
 }
