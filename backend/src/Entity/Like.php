@@ -19,7 +19,7 @@ class Like
     private ?Post $post = null;
 
     #[ORM\ManyToOne(inversedBy: 'likes')]
-    private ?User $userId = null;
+    private ?User $user = null;
 
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $guestToken = null;
@@ -44,14 +44,14 @@ class Like
         return $this;
     }
 
-    public function getUserId(): ?User
+    public function getuser(): ?User
     {
-        return $this->userId;
+        return $this->user;
     }
 
-    public function setUserId(?User $userId): static
+    public function setuser(?User $user): static
     {
-        $this->userId = $userId;
+        $this->user = $user;
 
         return $this;
     }
