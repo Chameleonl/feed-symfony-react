@@ -43,6 +43,9 @@ class Post
     #[ORM\ManyToMany(targetEntity: Tag::class, mappedBy: 'posts')]
     private Collection $tags;
 
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $authorName = null;
+
     public function __construct()
     {
         $this->likes = new ArrayCollection();
@@ -169,6 +172,18 @@ class Post
         if ($this->tags->removeElement($tag)) {
             $tag->removePost($this);
         }
+
+        return $this;
+    }
+
+    public function getAuthorName(): ?string
+    {
+        return $this->authorName;
+    }
+
+    public function setAuthorName(?string $authorName): static
+    {
+        $this->authorName = $authorName;
 
         return $this;
     }
