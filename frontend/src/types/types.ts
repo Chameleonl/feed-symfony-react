@@ -6,6 +6,7 @@ export type PostResponse = {
 	id: number;
 	content: string;
 	createdAt: string;
+	updatedAt: string;
 	likesCount: number;
 	authorName: string;
 	authorId: string | null;

@@ -156,6 +156,18 @@ export const deletePost = async (id: number): Promise<DeleteResponse> => {
 	});
 };
 
+export async function editPost(id: number, content: string, tags: string[] = []): Promise<CreateResponse> {
+	const headers = {
+		...jsonHeaders(),
+	};
+
+	return apiFetch<CreateResponse>(`${API_URL}/posts/${id}`, {
+		method: "PUT",
+		headers: headers,
+		body: JSON.stringify({ id, content, tags }),
+	});
+}
+
 export const likePost = async (id: number): Promise<LikeResponse> => {
 	const headers = {
 		...jsonHeaders(),

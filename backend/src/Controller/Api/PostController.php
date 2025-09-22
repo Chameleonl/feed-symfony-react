@@ -58,6 +58,7 @@ class PostController extends AbstractController
                 "id" => $post->getId(),
                 "content" => $post->getContent(),
                 "createdAt" => $post->getCreatedAt(),
+                "updatedAt" => $post->getUpdatedAt(),
                 "authorName" => $post->getAuthor() ? $post->getAuthor()->getUsername() : $post->getAuthorName(),
                 "authorId" => (string) $post->getAuthor()?->getId(),
                 "authorToken" => $post->getAuthorToken(),
@@ -212,5 +213,40 @@ class PostController extends AbstractController
                 return $this->json(["error" => "Missing authentication"], 400);
             }
             return $this->json(["id" => $id, "message" => "Unliked successfully"], 200);
+    }
+
+    #[Route("/api/posts/{id}", name: "edit", methods: ["PUT"])]
+    public function edit(int $id, Request $request): JsonResponse
+    {
+        $post = $this->em->getRepository(Post::class)->find($id);
+        if (!$post)
+            return $this->json(["error" => "Post not found"], 404);
+
+        $user = $this->getUser();
+        $guestToken = $request->headers->get("X-Guest-Token") ?? null;
+
+        $userId = $user instanceof User ? $user->getId() : null;
+
+        $isAuthor = ($post->getAuthor()?->getId() === $userId) || ($post->getAuthorToken() === $guestToken);
+
+        if (!$isAuthor)
+            return $this->json(["error" => "Forbidden"], 403);
+
+        $data = json_decode($request->getContent(), true);
+        $newContent = $data["content"] ?? null;
+        $newTags = $data["tags"] ?? null;
+
+        if (!$newContent || strlen($newContent) > 255) {
+        return $this->json(["error" => "Invalid content"], 400);
+        }
+
+        $post->setContent($newContent);
+        $post->setUpdatedAt(new \DateTime());
+        $post->setTags($newTags);
+
+        $this->em->persist($post);
+        $this->em->flush();
+
+        return $this->json(["id" => $id, "message" => "Edited sucessfully", "content" => $post->getContent(), "tags" => $post->getTags(), "updatedAt" => $post->getUpdatedAt()->format("c")], 200);
     }
 }
