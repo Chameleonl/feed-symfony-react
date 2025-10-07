@@ -39,7 +39,7 @@ export interface TagsInputProps {
 
 const defaultSeparators = ["Enter", "Tab"];
 
-function Tag({ text, remove, disabled, className }: TagProps) {
+function Tag({ text, remove, disabled }: TagProps) {
 	const handleOnRemove = (e: any) => {
 		e.stopPropagation();
 		remove(text);

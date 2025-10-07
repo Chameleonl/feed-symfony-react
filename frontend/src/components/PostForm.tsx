@@ -2,7 +2,7 @@ import { TagsInput } from "@/components/TagsInput";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@radix-ui/react-label";
-import { useState, type FormEvent } from "react";
+import { type FormEvent } from "react";
 
 interface Props {
 	newPost: string;
