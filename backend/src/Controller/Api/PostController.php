@@ -215,7 +215,7 @@ class PostController extends AbstractController
             return $this->json(["id" => $id, "message" => "Unliked successfully"], 200);
     }
 
-    #[Route("/api/posts/{id}", name: "edit", methods: ["PUT"])]
+    #[Route("/api/posts/{id}", name: "edit", methods: ["PATCH"])]
     public function edit(int $id, Request $request): JsonResponse
     {
         $post = $this->em->getRepository(Post::class)->find($id);
@@ -242,7 +242,16 @@ class PostController extends AbstractController
 
         $post->setContent($newContent);
         $post->setUpdatedAt(new \DateTime());
-        $post->setTags($newTags);
+        foreach ($newTags as $tagName) {
+            $tagName = strtolower(str_replace(' ', '', $tagName));
+            $tag = $this->em->getRepository(Tag::class)->findOneBy(["name" => $tagName]);
+            if (!$tag) {
+                $tag = new Tag();
+                $tag->setName((string) $tagName);
+                $this->em->persist($tag);
+            }
+            $post->addTag($tag);
+        }
 
         $this->em->persist($post);
         $this->em->flush();
